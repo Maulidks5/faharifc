@@ -6,11 +6,13 @@ import { formatCurrency, formatDate } from '../lib/utils';
 interface Member {
   id: string;
   full_name: string;
+  id_no: string | null;
   date_of_birth: string;
   phone: string;
   role: string;
   member_type: string;
   monthly_salary: number;
+  registration_fee: number;
 }
 
 interface MemberProfile {
@@ -33,10 +35,12 @@ export default function Members({ type }: MembersProps) {
   const [viewingProfile, setViewingProfile] = useState<MemberProfile | null>(null);
   const [formData, setFormData] = useState({
     full_name: '',
+    id_no: '',
     date_of_birth: '',
     phone: '',
     role: '',
     monthly_salary: '',
+    registration_fee: '',
   });
 
   useEffect(() => {
@@ -61,6 +65,8 @@ export default function Members({ type }: MembersProps) {
       ...formData,
       member_type: type,
       monthly_salary: parseFloat(formData.monthly_salary),
+      registration_fee: parseFloat(formData.registration_fee),
+      id_no: formData.id_no || null,
     };
 
     if (editingMember) {
@@ -71,7 +77,15 @@ export default function Members({ type }: MembersProps) {
 
     setShowForm(false);
     setEditingMember(null);
-    setFormData({ full_name: '', date_of_birth: '', phone: '', role: '', monthly_salary: '' });
+    setFormData({
+      full_name: '',
+      id_no: '',
+      date_of_birth: '',
+      phone: '',
+      role: '',
+      monthly_salary: '',
+      registration_fee: '',
+    });
     loadMembers();
   };
 
@@ -79,10 +93,12 @@ export default function Members({ type }: MembersProps) {
     setEditingMember(member);
     setFormData({
       full_name: member.full_name,
+      id_no: member.id_no || '',
       date_of_birth: member.date_of_birth,
       phone: member.phone,
       role: member.role,
       monthly_salary: member.monthly_salary.toString(),
+      registration_fee: Number(member.registration_fee ?? 0).toString(),
     });
     setShowForm(true);
   };
@@ -125,7 +141,15 @@ export default function Members({ type }: MembersProps) {
         <button
           onClick={() => {
             setEditingMember(null);
-            setFormData({ full_name: '', date_of_birth: '', phone: '', role: '', monthly_salary: '' });
+            setFormData({
+              full_name: '',
+              id_no: '',
+              date_of_birth: '',
+              phone: '',
+              role: '',
+              monthly_salary: '',
+              registration_fee: '',
+            });
             setShowForm(true);
           }}
           className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -140,16 +164,18 @@ export default function Members({ type }: MembersProps) {
           <thead className="bg-gray-50 border-b border-gray-200">
             <tr>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Name</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">ID No</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Role</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Phone</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Monthly Salary</th>
+              <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Registration Fee</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {members.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={7} className="px-6 py-8 text-center text-gray-500">
                   No {title.toLowerCase()} found
                 </td>
               </tr>
@@ -157,9 +183,11 @@ export default function Members({ type }: MembersProps) {
               members.map((member) => (
                 <tr key={member.id} className="hover:bg-gray-50">
                   <td className="px-6 py-4 text-sm font-medium text-gray-900">{member.full_name}</td>
+                  <td className="px-6 py-4 text-sm text-gray-700">{member.id_no || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{member.role}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{member.phone}</td>
                   <td className="px-6 py-4 text-sm text-gray-900">{formatCurrency(member.monthly_salary)}</td>
+                  <td className="px-6 py-4 text-sm text-gray-900">{formatCurrency(Number(member.registration_fee ?? 0))}</td>
                   <td className="px-6 py-4 text-sm text-right">
                     <div className="flex items-center justify-end space-x-2">
                       <button
@@ -217,6 +245,16 @@ export default function Members({ type }: MembersProps) {
                 />
               </div>
               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">ID No</label>
+                <input
+                  type="text"
+                  value={formData.id_no}
+                  onChange={(e) => setFormData({ ...formData, id_no: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  placeholder="e.g., P001 or S001"
+                />
+              </div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Phone</label>
                 <input
                   type="tel"
@@ -243,6 +281,17 @@ export default function Members({ type }: MembersProps) {
                   type="number"
                   value={formData.monthly_salary}
                   onChange={(e) => setFormData({ ...formData, monthly_salary: e.target.value })}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Registration Fee (TZS)</label>
+                <input
+                  type="number"
+                  min={0}
+                  value={formData.registration_fee}
+                  onChange={(e) => setFormData({ ...formData, registration_fee: e.target.value })}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent"
                   required
                 />
@@ -277,6 +326,10 @@ export default function Members({ type }: MembersProps) {
 
             <div className="grid grid-cols-2 gap-4 mb-6 pb-6 border-b border-gray-200">
               <div>
+                <p className="text-sm text-gray-600">ID No</p>
+                <p className="font-medium">{viewingProfile.member.id_no || '-'}</p>
+              </div>
+              <div>
                 <p className="text-sm text-gray-600">Role</p>
                 <p className="font-medium">{viewingProfile.member.role}</p>
               </div>
@@ -291,6 +344,10 @@ export default function Members({ type }: MembersProps) {
               <div>
                 <p className="text-sm text-gray-600">Monthly Salary</p>
                 <p className="font-medium">{formatCurrency(viewingProfile.member.monthly_salary)}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">Registration Fee</p>
+                <p className="font-medium">{formatCurrency(Number(viewingProfile.member.registration_fee ?? 0))}</p>
               </div>
             </div>
 

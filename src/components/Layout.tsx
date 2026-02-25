@@ -20,6 +20,7 @@ export default function Layout({ children, currentPage, onNavigate }: LayoutProp
     { name: 'Income', icon: TrendingUp, page: 'income' },
     { name: 'Match Expenses', icon: Trophy, page: 'matches' },
     { name: 'Other Expenses', icon: Receipt, page: 'other-expenses' },
+    { name: 'Contracts', icon: FileText, page: 'contracts' },
     { name: 'Reports', icon: FileText, page: 'reports' },
   ];
 

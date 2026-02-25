@@ -8,6 +8,7 @@ import Income from './pages/Income';
 import MatchExpenses from './pages/MatchExpenses';
 import OtherExpenses from './pages/OtherExpenses';
 import Reports from './pages/Reports';
+import Contracts from './pages/Contracts';
 import Layout from './components/Layout';
 
 function AppContent() {
@@ -35,6 +36,7 @@ function AppContent() {
       {currentPage === 'income' && <Income />}
       {currentPage === 'matches' && <MatchExpenses />}
       {currentPage === 'other-expenses' && <OtherExpenses />}
+      {currentPage === 'contracts' && <Contracts />}
       {currentPage === 'reports' && <Reports />}
     </Layout>
   );
