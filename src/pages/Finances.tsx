@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, DollarSign, TrendingUp, CreditCard } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Member {
   id: string;
@@ -10,9 +11,12 @@ interface Member {
 }
 
 export default function Finances() {
+  const { role } = useAuth();
+  const canCreate = role === 'admin' || role === 'finance';
   const [activeTab, setActiveTab] = useState<'salary' | 'extra' | 'income'>('salary');
   const [members, setMembers] = useState<Member[]>([]);
   const [showForm, setShowForm] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [formData, setFormData] = useState({
     member_id: '',
     amount: '',
@@ -28,36 +32,54 @@ export default function Finances() {
   }, []);
 
   const loadMembers = async () => {
-    const { data } = await supabase.from('members').select('id, full_name, monthly_salary').order('full_name');
+    setErrorMessage('');
+    const { data, error } = await supabase.from('members').select('id, full_name, monthly_salary').order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setMembers([]);
+      return;
+    }
     setMembers(data || []);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!canCreate) {
+      setErrorMessage('You do not have permission to record financial transactions.');
+      return;
+    }
+    setErrorMessage('');
+
+    let error: { message: string } | null = null;
 
     if (activeTab === 'salary') {
-      await supabase.from('salary_payments').insert({
+      ({ error } = await supabase.from('salary_payments').insert({
         member_id: formData.member_id,
         amount: parseFloat(formData.amount),
         payment_date: formData.payment_date,
         month: formData.month,
         notes: formData.notes,
-      });
+      }));
     } else if (activeTab === 'extra') {
-      await supabase.from('extra_payments').insert({
+      ({ error } = await supabase.from('extra_payments').insert({
         member_id: formData.member_id,
         amount: parseFloat(formData.amount),
         payment_date: formData.payment_date,
         category: formData.category,
         notes: formData.notes,
-      });
+      }));
     } else if (activeTab === 'income') {
-      await supabase.from('club_income').insert({
+      ({ error } = await supabase.from('club_income').insert({
         amount: parseFloat(formData.amount),
         income_date: formData.payment_date,
         source: formData.source,
         notes: formData.notes,
-      });
+      }));
+    }
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
     }
 
     setShowForm(false);
@@ -82,6 +104,7 @@ export default function Finances() {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">Financial Management</h2>
+        {canCreate && (
         <button
           onClick={() => setShowForm(true)}
           className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -96,7 +119,14 @@ export default function Finances() {
               : 'Income'}
           </span>
         </button>
+        )}
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200">
         <div className="border-b border-gray-200">
@@ -128,7 +158,7 @@ export default function Finances() {
         </div>
       </div>
 
-      {showForm && (
+      {showForm && canCreate && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">
@@ -265,6 +295,7 @@ export default function Finances() {
 function SalaryPaymentsList() {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadPayments();
@@ -272,15 +303,25 @@ function SalaryPaymentsList() {
 
   const loadPayments = async () => {
     setLoading(true);
-    const { data } = await supabase
+    setErrorMessage('');
+    const { data, error } = await supabase
       .from('salary_payments')
       .select('*, members(full_name)')
       .order('payment_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
     setPayments(data || []);
     setLoading(false);
   };
 
   if (loading) return <div className="text-center py-8">Loading...</div>;
+  if (errorMessage) {
+    return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -321,6 +362,7 @@ function SalaryPaymentsList() {
 function ExtraPaymentsList() {
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadPayments();
@@ -328,15 +370,25 @@ function ExtraPaymentsList() {
 
   const loadPayments = async () => {
     setLoading(true);
-    const { data } = await supabase
+    setErrorMessage('');
+    const { data, error } = await supabase
       .from('extra_payments')
       .select('*, members(full_name)')
       .order('payment_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setPayments([]);
+      setLoading(false);
+      return;
+    }
     setPayments(data || []);
     setLoading(false);
   };
 
   if (loading) return <div className="text-center py-8">Loading...</div>;
+  if (errorMessage) {
+    return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
+  }
 
   return (
     <div className="overflow-x-auto">
@@ -377,6 +429,7 @@ function ExtraPaymentsList() {
 function ClubIncomeList() {
   const [income, setIncome] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadIncome();
@@ -384,12 +437,22 @@ function ClubIncomeList() {
 
   const loadIncome = async () => {
     setLoading(true);
-    const { data } = await supabase.from('club_income').select('*').order('income_date', { ascending: false });
+    setErrorMessage('');
+    const { data, error } = await supabase.from('club_income').select('*').order('income_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setIncome([]);
+      setLoading(false);
+      return;
+    }
     setIncome(data || []);
     setLoading(false);
   };
 
   if (loading) return <div className="text-center py-8">Loading...</div>;
+  if (errorMessage) {
+    return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
+  }
 
   return (
     <div className="overflow-x-auto">

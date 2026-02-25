@@ -10,10 +10,13 @@ import OtherExpenses from './pages/OtherExpenses';
 import Reports from './pages/Reports';
 import Contracts from './pages/Contracts';
 import Layout from './components/Layout';
+import Users from './pages/Users';
 
 function AppContent() {
-  const { user, loading } = useAuth();
+  const { user, role, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState('dashboard');
+  const canManageOperations = role === 'admin' || role === 'staff';
+  const canManageFinance = role === 'admin' || role === 'finance';
 
   if (loading) {
     return (
@@ -30,14 +33,15 @@ function AppContent() {
   return (
     <Layout currentPage={currentPage} onNavigate={setCurrentPage}>
       {currentPage === 'dashboard' && <Dashboard />}
-      {currentPage === 'players' && <Members type="player" />}
-      {currentPage === 'staff' && <Members type="staff" />}
-      {currentPage === 'finances' && <Finances />}
-      {currentPage === 'income' && <Income />}
-      {currentPage === 'matches' && <MatchExpenses />}
-      {currentPage === 'other-expenses' && <OtherExpenses />}
-      {currentPage === 'contracts' && <Contracts />}
-      {currentPage === 'reports' && <Reports />}
+      {currentPage === 'players' && canManageOperations && <Members type="player" />}
+      {currentPage === 'staff' && canManageOperations && <Members type="staff" />}
+      {currentPage === 'finances' && canManageFinance && <Finances />}
+      {currentPage === 'income' && canManageFinance && <Income />}
+      {currentPage === 'matches' && canManageFinance && <MatchExpenses />}
+      {currentPage === 'other-expenses' && canManageFinance && <OtherExpenses />}
+      {currentPage === 'contracts' && canManageOperations && <Contracts />}
+      {currentPage === 'reports' && canManageFinance && <Reports />}
+      {currentPage === 'users' && role === 'admin' && <Users />}
     </Layout>
   );
 }

@@ -10,18 +10,26 @@ interface LayoutProps {
 
 export default function Layout({ children, currentPage, onNavigate }: LayoutProps) {
   const [sidebarOpen, setSidebarOpen] = useState(false);
-  const { signOut } = useAuth();
+  const { signOut, role } = useAuth();
+
+  const canManageOperations = role === 'admin' || role === 'staff';
+  const canManageFinance = role === 'admin' || role === 'finance';
 
   const navigation = [
     { name: 'Dashboard', icon: LayoutDashboard, page: 'dashboard' },
-    { name: 'Players', icon: Users, page: 'players' },
-    { name: 'Staff', icon: Users, page: 'staff' },
-    { name: 'Finances', icon: Wallet, page: 'finances' },
-    { name: 'Income', icon: TrendingUp, page: 'income' },
-    { name: 'Match Expenses', icon: Trophy, page: 'matches' },
-    { name: 'Other Expenses', icon: Receipt, page: 'other-expenses' },
-    { name: 'Contracts', icon: FileText, page: 'contracts' },
-    { name: 'Reports', icon: FileText, page: 'reports' },
+    ...(canManageOperations ? [
+      { name: 'Players', icon: Users, page: 'players' },
+      { name: 'Staff', icon: Users, page: 'staff' },
+      { name: 'Contracts', icon: FileText, page: 'contracts' },
+    ] : []),
+    ...(canManageFinance ? [
+      { name: 'Finances', icon: Wallet, page: 'finances' },
+      { name: 'Income', icon: TrendingUp, page: 'income' },
+      { name: 'Match Expenses', icon: Trophy, page: 'matches' },
+      { name: 'Other Expenses', icon: Receipt, page: 'other-expenses' },
+    ] : []),
+    ...(canManageFinance ? [{ name: 'Reports', icon: FileText, page: 'reports' }] : []),
+    ...(role === 'admin' ? [{ name: 'Users', icon: Users, page: 'users' }] : []),
   ];
 
   return (

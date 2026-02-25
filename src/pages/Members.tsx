@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2, Eye } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Member {
   id: string;
@@ -27,8 +28,12 @@ interface MembersProps {
 }
 
 export default function Members({ type }: MembersProps) {
+  const { role } = useAuth();
+  const canCreate = role === 'admin' || role === 'staff';
+  const isAdmin = role === 'admin';
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [showProfile, setShowProfile] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
@@ -49,17 +54,33 @@ export default function Members({ type }: MembersProps) {
 
   const loadMembers = async () => {
     setLoading(true);
-    const { data } = await supabase
+    setErrorMessage('');
+    const { data, error } = await supabase
       .from('members')
       .select('*')
       .eq('member_type', type)
       .order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setMembers([]);
+      setLoading(false);
+      return;
+    }
     setMembers(data || []);
     setLoading(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingMember && !isAdmin) {
+      setErrorMessage('Only admins can update members.');
+      return;
+    }
+    if (!editingMember && !canCreate) {
+      setErrorMessage('You do not have permission to create members.');
+      return;
+    }
+    setErrorMessage('');
 
     const memberData = {
       ...formData,
@@ -70,9 +91,17 @@ export default function Members({ type }: MembersProps) {
     };
 
     if (editingMember) {
-      await supabase.from('members').update(memberData).eq('id', editingMember.id);
+      const { error } = await supabase.from('members').update(memberData).eq('id', editingMember.id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     } else {
-      await supabase.from('members').insert(memberData);
+      const { error } = await supabase.from('members').insert(memberData);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     }
 
     setShowForm(false);
@@ -104,17 +133,31 @@ export default function Members({ type }: MembersProps) {
   };
 
   const handleDelete = async (id: string) => {
+    if (!isAdmin) {
+      setErrorMessage('Only admins can delete members.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this member?')) {
-      await supabase.from('members').delete().eq('id', id);
+      const { error } = await supabase.from('members').delete().eq('id', id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
       loadMembers();
     }
   };
 
   const handleViewProfile = async (member: Member) => {
-    const [{ data: salaryPayments }, { data: extraPayments }] = await Promise.all([
+    setErrorMessage('');
+    const [{ data: salaryPayments, error: salaryError }, { data: extraPayments, error: extraError }] = await Promise.all([
       supabase.from('salary_payments').select('*').eq('member_id', member.id).order('payment_date', { ascending: false }),
       supabase.from('extra_payments').select('*').eq('member_id', member.id).order('payment_date', { ascending: false }),
     ]);
+    if (salaryError || extraError) {
+      setErrorMessage(salaryError?.message || extraError?.message || 'Failed to load member profile.');
+      return;
+    }
 
     const totalSalaries = salaryPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
     const totalExtras = extraPayments?.reduce((sum, p) => sum + Number(p.amount), 0) || 0;
@@ -138,6 +181,7 @@ export default function Members({ type }: MembersProps) {
     <div className="space-y-6">
       <div className="flex justify-between items-center">
         <h2 className="text-2xl font-bold text-gray-900">{title}</h2>
+        {canCreate && (
         <button
           onClick={() => {
             setEditingMember(null);
@@ -157,7 +201,14 @@ export default function Members({ type }: MembersProps) {
           <Plus className="w-5 h-5" />
           <span>Add {type === 'player' ? 'Player' : 'Staff'}</span>
         </button>
+        )}
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
@@ -199,12 +250,16 @@ export default function Members({ type }: MembersProps) {
                       <button
                         onClick={() => handleEdit(member)}
                         className="p-1 text-green-600 hover:bg-green-50 rounded"
+                        disabled={!isAdmin}
+                        title={isAdmin ? 'Edit member' : 'Admin only'}
                       >
                         <Edit2 className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(member.id)}
                         className="p-1 text-red-600 hover:bg-red-50 rounded"
+                        disabled={!isAdmin}
+                        title={isAdmin ? 'Delete member' : 'Admin only'}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -217,7 +272,7 @@ export default function Members({ type }: MembersProps) {
         </table>
       </div>
 
-      {showForm && (
+      {showForm && canCreate && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">

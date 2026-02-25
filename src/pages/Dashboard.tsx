@@ -2,10 +2,13 @@ import { useEffect, useState } from 'react';
 import { Users, Briefcase, TrendingUp, TrendingDown, DollarSign, Trophy } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface Stats {
   totalPlayers: number;
   totalStaff: number;
+  totalContracts: number;
+  activeContracts: number;
   totalSalariesPaid: number;
   totalExtraPayments: number;
   totalMatchExpenses: number;
@@ -23,9 +26,12 @@ interface Transaction {
 }
 
 export default function Dashboard() {
+  const { role } = useAuth();
   const [stats, setStats] = useState<Stats>({
     totalPlayers: 0,
     totalStaff: 0,
+    totalContracts: 0,
+    activeContracts: 0,
     totalSalariesPaid: 0,
     totalExtraPayments: 0,
     totalMatchExpenses: 0,
@@ -35,6 +41,7 @@ export default function Dashboard() {
   });
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
 
   useEffect(() => {
     loadDashboardData();
@@ -42,22 +49,27 @@ export default function Dashboard() {
 
   const loadDashboardData = async () => {
     setLoading(true);
+    setErrorMessage('');
 
     const [
-      { count: playerCount },
-      { count: staffCount },
-      { data: salaries },
-      { data: extras },
-      { data: matches },
-      { data: otherExpenses },
-      { data: income },
-      { data: recentSalaries },
-      { data: recentExtras },
-      { data: recentOtherExpenses },
-      { data: recentIncome },
+      { count: playerCount, error: playerCountError },
+      { count: staffCount, error: staffCountError },
+      { count: contractsCount, error: contractsCountError },
+      { count: activeContractsCount, error: activeContractsCountError },
+      { data: salaries, error: salariesError },
+      { data: extras, error: extrasError },
+      { data: matches, error: matchesError },
+      { data: otherExpenses, error: otherExpensesError },
+      { data: income, error: incomeError },
+      { data: recentSalaries, error: recentSalariesError },
+      { data: recentExtras, error: recentExtrasError },
+      { data: recentOtherExpenses, error: recentOtherExpensesError },
+      { data: recentIncome, error: recentIncomeError },
     ] = await Promise.all([
       supabase.from('members').select('*', { count: 'exact', head: true }).eq('member_type', 'player'),
       supabase.from('members').select('*', { count: 'exact', head: true }).eq('member_type', 'staff'),
+      supabase.from('contracts').select('*', { count: 'exact', head: true }),
+      supabase.from('contracts').select('*', { count: 'exact', head: true }).eq('status', 'active'),
       supabase.from('salary_payments').select('amount'),
       supabase.from('extra_payments').select('amount'),
       supabase.from('match_expenses').select('amount'),
@@ -68,6 +80,26 @@ export default function Dashboard() {
       supabase.from('other_expenses').select('*').order('expense_date', { ascending: false }).limit(5),
       supabase.from('club_income').select('*').order('income_date', { ascending: false }).limit(5),
     ]);
+    const firstError =
+      playerCountError ||
+      staffCountError ||
+      contractsCountError ||
+      activeContractsCountError ||
+      salariesError ||
+      extrasError ||
+      matchesError ||
+      otherExpensesError ||
+      incomeError ||
+      recentSalariesError ||
+      recentExtrasError ||
+      recentOtherExpensesError ||
+      recentIncomeError;
+
+    if (firstError) {
+      setErrorMessage(firstError.message);
+      setLoading(false);
+      return;
+    }
 
     const totalSalariesPaid = salaries?.reduce((sum, s) => sum + Number(s.amount), 0) || 0;
     const totalExtraPayments = extras?.reduce((sum, e) => sum + Number(e.amount), 0) || 0;
@@ -78,6 +110,8 @@ export default function Dashboard() {
     setStats({
       totalPlayers: playerCount || 0,
       totalStaff: staffCount || 0,
+      totalContracts: contractsCount || 0,
+      activeContracts: activeContractsCount || 0,
       totalSalariesPaid,
       totalExtraPayments,
       totalMatchExpenses,
@@ -123,21 +157,25 @@ export default function Dashboard() {
     setLoading(false);
   };
 
-  const statCards = [
+  const operationsCards = [
     { label: 'Total Players', value: stats.totalPlayers, icon: Users, color: 'blue' },
     { label: 'Total Staff', value: stats.totalStaff, icon: Briefcase, color: 'purple' },
+    { label: 'Total Contracts', value: stats.totalContracts, icon: Trophy, color: 'indigo' },
+    { label: 'Active Contracts', value: stats.activeContracts, icon: Trophy, color: 'green' },
+  ];
+  const financeCards = [
     { label: 'Salaries Paid', value: formatCurrency(stats.totalSalariesPaid), icon: DollarSign, color: 'red' },
     { label: 'Extra Payments', value: formatCurrency(stats.totalExtraPayments), icon: DollarSign, color: 'orange' },
     { label: 'Match Expenses', value: formatCurrency(stats.totalMatchExpenses), icon: Trophy, color: 'indigo' },
     { label: 'Other Expenses', value: formatCurrency(stats.totalOtherExpenses), icon: DollarSign, color: 'yellow' },
     { label: 'Total Income', value: formatCurrency(stats.totalIncome), icon: TrendingUp, color: 'green' },
-    {
-      label: 'Net Balance',
-      value: formatCurrency(stats.netBalance),
-      icon: stats.netBalance >= 0 ? TrendingUp : TrendingDown,
-      color: stats.netBalance >= 0 ? 'green' : 'red',
-    },
   ];
+  const adminOnlyCard = {
+    label: 'Net Balance',
+    value: formatCurrency(stats.netBalance),
+    icon: stats.netBalance >= 0 ? TrendingUp : TrendingDown,
+    color: stats.netBalance >= 0 ? 'green' : 'red',
+  };
 
   if (loading) {
     return (
@@ -162,8 +200,25 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-6">
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
+      <div className="bg-white rounded-lg shadow-sm border border-gray-200 px-4 py-3 text-sm text-gray-600">
+        {role === 'admin'
+          ? 'Admin Dashboard: full operations, finance, and user-management visibility.'
+          : role === 'finance'
+          ? 'Finance Dashboard: finance operations and reporting visibility.'
+          : 'Staff Dashboard: players, staff, and contracts visibility.'}
+      </div>
+
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-        {statCards.map((card) => {
+        {[
+          ...(role === 'admin' || role === 'staff' ? operationsCards : []),
+          ...(role === 'admin' || role === 'finance' ? financeCards : []),
+          ...(role === 'admin' || role === 'finance' ? [adminOnlyCard] : []),
+        ].map((card) => {
           const Icon = card.icon;
           const colors = getColorClasses(card.color);
           return (

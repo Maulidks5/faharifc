@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface IncomeRecord {
   id: string;
@@ -12,8 +13,12 @@ interface IncomeRecord {
 }
 
 export default function Income() {
+  const { role } = useAuth();
+  const canCreate = role === 'admin' || role === 'finance';
+  const canManageFinance = role === 'admin';
   const [incomeRecords, setIncomeRecords] = useState<IncomeRecord[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingRecord, setEditingRecord] = useState<IncomeRecord | null>(null);
   const [totalIncome, setTotalIncome] = useState(0);
@@ -30,7 +35,16 @@ export default function Income() {
 
   const loadIncome = async () => {
     setLoading(true);
-    const { data } = await supabase.from('club_income').select('*').order('income_date', { ascending: false });
+    setErrorMessage('');
+    const { data, error } = await supabase.from('club_income').select('*').order('income_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setIncomeRecords([]);
+      setTotalIncome(0);
+      setLoading(false);
+      return;
+    }
+
     setIncomeRecords(data || []);
     const total = data?.reduce((sum, record) => sum + Number(record.amount), 0) || 0;
     setTotalIncome(total);
@@ -39,6 +53,15 @@ export default function Income() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingRecord && !canManageFinance) {
+      setErrorMessage('Only admins can update income records.');
+      return;
+    }
+    if (!editingRecord && !canCreate) {
+      setErrorMessage('You do not have permission to add income records.');
+      return;
+    }
+    setErrorMessage('');
 
     const incomeData = {
       source: formData.source,
@@ -48,9 +71,17 @@ export default function Income() {
     };
 
     if (editingRecord) {
-      await supabase.from('club_income').update(incomeData).eq('id', editingRecord.id);
+      const { error } = await supabase.from('club_income').update(incomeData).eq('id', editingRecord.id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     } else {
-      await supabase.from('club_income').insert(incomeData);
+      const { error } = await supabase.from('club_income').insert(incomeData);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     }
 
     setShowForm(false);
@@ -71,8 +102,17 @@ export default function Income() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canManageFinance) {
+      setErrorMessage('Only admins can delete income records.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this income record?')) {
-      await supabase.from('club_income').delete().eq('id', id);
+      const { error } = await supabase.from('club_income').delete().eq('id', id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
       loadIncome();
     }
   };
@@ -88,6 +128,7 @@ export default function Income() {
           <h2 className="text-2xl font-bold text-gray-900">Income Management</h2>
           <p className="text-sm text-gray-600 mt-1">Total Income: {formatCurrency(totalIncome)}</p>
         </div>
+        {canCreate && (
         <button
           onClick={() => {
             setEditingRecord(null);
@@ -99,7 +140,14 @@ export default function Income() {
           <Plus className="w-5 h-5" />
           <span>Add Income</span>
         </button>
+        )}
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
@@ -109,13 +157,15 @@ export default function Income() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              {canManageFinance && (
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {incomeRecords.length === 0 ? (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={canManageFinance ? 5 : 4} className="px-6 py-8 text-center text-gray-500">
                   No income records found
                 </td>
               </tr>
@@ -128,6 +178,7 @@ export default function Income() {
                   <td className="px-6 py-4 text-sm text-green-600 font-medium text-right">
                     {formatCurrency(record.amount)}
                   </td>
+                  {canManageFinance && (
                   <td className="px-6 py-4 text-sm text-right">
                     <div className="flex items-center justify-end space-x-2">
                       <button
@@ -144,6 +195,7 @@ export default function Income() {
                       </button>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))
             )}
@@ -151,7 +203,7 @@ export default function Income() {
         </table>
       </div>
 
-      {showForm && (
+      {showForm && canCreate && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Plus, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
+import { useAuth } from '../contexts/AuthContext';
 
 interface OtherExpense {
   id: string;
@@ -21,8 +22,12 @@ const defaultFormData = {
 };
 
 export default function OtherExpenses() {
+  const { role } = useAuth();
+  const canCreate = role === 'admin' || role === 'finance';
+  const canManageFinance = role === 'admin';
   const [expenses, setExpenses] = useState<OtherExpense[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingExpense, setEditingExpense] = useState<OtherExpense | null>(null);
   const [totalExpenses, setTotalExpenses] = useState(0);
@@ -34,10 +39,18 @@ export default function OtherExpenses() {
 
   const loadExpenses = async () => {
     setLoading(true);
-    const { data } = await supabase
+    setErrorMessage('');
+    const { data, error } = await supabase
       .from('other_expenses')
       .select('*')
       .order('expense_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setExpenses([]);
+      setTotalExpenses(0);
+      setLoading(false);
+      return;
+    }
 
     setExpenses(data || []);
     const total = data?.reduce((sum, item) => sum + Number(item.amount), 0) || 0;
@@ -47,6 +60,15 @@ export default function OtherExpenses() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingExpense && !canManageFinance) {
+      setErrorMessage('Only admins can update other expenses.');
+      return;
+    }
+    if (!editingExpense && !canCreate) {
+      setErrorMessage('You do not have permission to add other expenses.');
+      return;
+    }
+    setErrorMessage('');
 
     const expenseData = {
       expense_item: formData.expense_item,
@@ -57,9 +79,17 @@ export default function OtherExpenses() {
     };
 
     if (editingExpense) {
-      await supabase.from('other_expenses').update(expenseData).eq('id', editingExpense.id);
+      const { error } = await supabase.from('other_expenses').update(expenseData).eq('id', editingExpense.id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     } else {
-      await supabase.from('other_expenses').insert(expenseData);
+      const { error } = await supabase.from('other_expenses').insert(expenseData);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
     }
 
     setShowForm(false);
@@ -81,8 +111,17 @@ export default function OtherExpenses() {
   };
 
   const handleDelete = async (id: string) => {
+    if (!canManageFinance) {
+      setErrorMessage('Only admins can delete other expenses.');
+      return;
+    }
+
     if (confirm('Are you sure you want to delete this expense record?')) {
-      await supabase.from('other_expenses').delete().eq('id', id);
+      const { error } = await supabase.from('other_expenses').delete().eq('id', id);
+      if (error) {
+        setErrorMessage(error.message);
+        return;
+      }
       loadExpenses();
     }
   };
@@ -98,6 +137,7 @@ export default function OtherExpenses() {
           <h2 className="text-2xl font-bold text-gray-900">Other Expenses</h2>
           <p className="text-sm text-gray-600 mt-1">Total: {formatCurrency(totalExpenses)}</p>
         </div>
+        {canCreate && (
         <button
           onClick={() => {
             setEditingExpense(null);
@@ -109,7 +149,14 @@ export default function OtherExpenses() {
           <Plus className="w-5 h-5" />
           <span>Add Expense</span>
         </button>
+        )}
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
@@ -120,13 +167,15 @@ export default function OtherExpenses() {
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
               <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
               <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
-              <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              {canManageFinance && (
+                <th className="px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+              )}
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {expenses.length === 0 ? (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-gray-500">
+                <td colSpan={canManageFinance ? 6 : 5} className="px-6 py-8 text-center text-gray-500">
                   No other expenses recorded
                 </td>
               </tr>
@@ -138,6 +187,7 @@ export default function OtherExpenses() {
                   <td className="px-6 py-4 text-sm text-gray-600">{expense.category}</td>
                   <td className="px-6 py-4 text-sm text-gray-600">{expense.notes || '-'}</td>
                   <td className="px-6 py-4 text-sm text-gray-900 text-right">{formatCurrency(expense.amount)}</td>
+                  {canManageFinance && (
                   <td className="px-6 py-4 text-sm text-right">
                     <div className="flex items-center justify-end space-x-2">
                       <button
@@ -154,6 +204,7 @@ export default function OtherExpenses() {
                       </button>
                     </div>
                   </td>
+                  )}
                 </tr>
               ))
             )}
@@ -161,7 +212,7 @@ export default function OtherExpenses() {
         </table>
       </div>
 
-      {showForm && (
+      {showForm && canCreate && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
             <h3 className="text-xl font-bold text-gray-900 mb-4">

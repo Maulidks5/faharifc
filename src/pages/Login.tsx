@@ -15,9 +15,8 @@ export default function Login() {
     setLoading(true);
 
     const { error } = await signIn(email, password);
-
     if (error) {
-      setError('Invalid email or password');
+      setError(error.message || 'Invalid email or password');
     }
 
     setLoading(false);
@@ -31,17 +30,13 @@ export default function Login() {
             <div className="w-16 h-16 bg-green-600 rounded-full flex items-center justify-center mb-4">
               <Trophy className="w-8 h-8 text-white" />
             </div>
-            <h1 className="text-2xl font-bold text-gray-900 text-center">
-              Fahari Football Club
-            </h1>
+            <h1 className="text-2xl font-bold text-gray-900 text-center">Fahari Football Club</h1>
             <p className="text-gray-600 text-center mt-1">Management System</p>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {error && (
-              <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">
-                {error}
-              </div>
+              <div className="bg-red-50 text-red-700 px-4 py-3 rounded-lg text-sm">{error}</div>
             )}
 
             <div>
@@ -84,7 +79,7 @@ export default function Login() {
           </form>
 
           <div className="mt-6 text-center text-sm text-gray-500">
-            <p>Welcome to Fahari Management System</p>
+            <p>Account registration is managed by admin inside dashboard.</p>
           </div>
         </div>
       </div>

@@ -23,6 +23,7 @@ export default function Reports() {
   const [members, setMembers] = useState<Member[]>([]);
   const [selectedMember, setSelectedMember] = useState('');
   const [loading, setLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -32,7 +33,13 @@ export default function Reports() {
   }, []);
 
   const loadMembers = async () => {
-    const { data } = await supabase.from('members').select('*').order('full_name');
+    setErrorMessage('');
+    const { data, error } = await supabase.from('members').select('*').order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setMembers([]);
+      return;
+    }
     setMembers(data || []);
   };
 
@@ -82,6 +89,7 @@ export default function Reports() {
     }
 
     setLoading(true);
+    setErrorMessage('');
     const member = members.find((m) => m.id === selectedMember);
     const { startDate, endDate } = getDateRange();
 
@@ -97,10 +105,15 @@ export default function Reports() {
       extraQuery = extraQuery.lte('payment_date', endDate);
     }
 
-    const [{ data: salaryPayments }, { data: extraPayments }] = await Promise.all([
+    const [{ data: salaryPayments, error: salaryError }, { data: extraPayments, error: extraError }] = await Promise.all([
       salaryQuery.order('payment_date', { ascending: false }),
       extraQuery.order('payment_date', { ascending: false }),
     ]);
+    if (salaryError || extraError) {
+      setErrorMessage(salaryError?.message || extraError?.message || 'Failed to generate member report.');
+      setLoading(false);
+      return;
+    }
 
     generateMemberReport(member, salaryPayments || [], extraPayments || [], startDate, endDate);
     setLoading(false);
@@ -108,20 +121,33 @@ export default function Reports() {
 
   const handleAllPlayersReport = async () => {
     setLoading(true);
-    const { data } = await supabase.from('members').select('*').eq('member_type', 'player').order('full_name');
+    setErrorMessage('');
+    const { data, error } = await supabase.from('members').select('*').eq('member_type', 'player').order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
     generateAllMembersReport(data || [], 'player');
     setLoading(false);
   };
 
   const handleAllStaffReport = async () => {
     setLoading(true);
-    const { data } = await supabase.from('members').select('*').eq('member_type', 'staff').order('full_name');
+    setErrorMessage('');
+    const { data, error } = await supabase.from('members').select('*').eq('member_type', 'staff').order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
     generateAllMembersReport(data || [], 'staff');
     setLoading(false);
   };
 
   const handleMatchExpensesReport = async () => {
     setLoading(true);
+    setErrorMessage('');
     const { startDate, endDate } = getDateRange();
 
     let query = supabase.from('match_expenses').select('*');
@@ -133,13 +159,19 @@ export default function Reports() {
       query = query.lte('match_date', endDate);
     }
 
-    const { data } = await query.order('match_date', { ascending: false });
+    const { data, error } = await query.order('match_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
     generateMatchExpensesReport(data || [], startDate, endDate);
     setLoading(false);
   };
 
   const handleFinancialSummaryReport = async () => {
     setLoading(true);
+    setErrorMessage('');
     const { startDate, endDate } = getDateRange();
 
     let salariesQuery = supabase.from('salary_payments').select('amount');
@@ -164,13 +196,13 @@ export default function Reports() {
     }
 
     const [
-      { count: playerCount },
-      { count: staffCount },
-      { data: salaries },
-      { data: extras },
-      { data: matches },
-      { data: otherExpenses },
-      { data: income },
+      { count: playerCount, error: playerCountError },
+      { count: staffCount, error: staffCountError },
+      { data: salaries, error: salariesError },
+      { data: extras, error: extrasError },
+      { data: matches, error: matchesError },
+      { data: otherExpenses, error: otherExpensesError },
+      { data: income, error: incomeError },
     ] = await Promise.all([
       supabase.from('members').select('*', { count: 'exact', head: true }).eq('member_type', 'player'),
       supabase.from('members').select('*', { count: 'exact', head: true }).eq('member_type', 'staff'),
@@ -180,6 +212,19 @@ export default function Reports() {
       otherExpensesQuery,
       incomeQuery,
     ]);
+    const firstError =
+      playerCountError ||
+      staffCountError ||
+      salariesError ||
+      extrasError ||
+      matchesError ||
+      otherExpensesError ||
+      incomeError;
+    if (firstError) {
+      setErrorMessage(firstError.message);
+      setLoading(false);
+      return;
+    }
 
     const data = {
       totalPlayers: playerCount || 0,
@@ -197,6 +242,7 @@ export default function Reports() {
 
   const handleOtherExpensesReport = async () => {
     setLoading(true);
+    setErrorMessage('');
     const { startDate, endDate } = getDateRange();
 
     let query = supabase.from('other_expenses').select('*');
@@ -208,7 +254,12 @@ export default function Reports() {
       query = query.lte('expense_date', endDate);
     }
 
-    const { data } = await query.order('expense_date', { ascending: false });
+    const { data, error } = await query.order('expense_date', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setLoading(false);
+      return;
+    }
     generateOtherExpensesReport(data || [], startDate, endDate);
     setLoading(false);
   };
@@ -272,6 +323,12 @@ export default function Reports() {
 
   return (
     <div className="space-y-6">
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
+
       <div>
         <h2 className="text-2xl font-bold text-gray-900">Reports</h2>
         <p className="text-gray-600 mt-1">Generate and download professional PDF reports</p>

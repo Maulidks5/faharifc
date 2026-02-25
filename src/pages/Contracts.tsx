@@ -3,6 +3,7 @@ import { Plus, Edit2, Download, Ban, CheckCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { generateContractAgreement } from '../lib/pdfGenerator';
+import { useAuth } from '../contexts/AuthContext';
 
 type ContractType = 'player' | 'staff';
 type ContractStatus = 'draft' | 'active' | 'expired' | 'terminated';
@@ -58,9 +59,13 @@ const defaultFormData = {
 };
 
 export default function Contracts() {
+  const { role } = useAuth();
+  const canCreate = role === 'admin' || role === 'staff';
+  const isAdmin = role === 'admin';
   const [contracts, setContracts] = useState<ContractRecord[]>([]);
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [editingContract, setEditingContract] = useState<ContractRecord | null>(null);
   const [filter, setFilter] = useState<'all' | ContractType>('all');
@@ -72,21 +77,34 @@ export default function Contracts() {
   }, []);
 
   const loadMembers = async () => {
-    const { data } = await supabase
+    setErrorMessage('');
+    const { data, error } = await supabase
       .from('members')
       .select('id, full_name, id_no, member_type, role, monthly_salary, registration_fee')
       .order('full_name');
+    if (error) {
+      setErrorMessage(error.message);
+      setMembers([]);
+      return;
+    }
 
     setMembers((data as Member[]) || []);
   };
 
   const loadContracts = async () => {
     setLoading(true);
+    setErrorMessage('');
 
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('contracts')
       .select('*, members(id, full_name, id_no, member_type, role, monthly_salary, registration_fee)')
       .order('created_at', { ascending: false });
+    if (error) {
+      setErrorMessage(error.message);
+      setContracts([]);
+      setLoading(false);
+      return;
+    }
 
     setContracts((data as ContractRecord[]) || []);
     setLoading(false);
@@ -138,12 +156,21 @@ export default function Contracts() {
   };
 
   const openCreateForm = async () => {
+    if (!canCreate) {
+      setErrorMessage('You do not have permission to create contracts.');
+      return;
+    }
     setEditingContract(null);
     setFormData(defaultFormData);
     setShowForm(true);
   };
 
   const handleEdit = (contract: ContractRecord) => {
+    if (!isAdmin) {
+      setErrorMessage('Only admins can edit contracts.');
+      return;
+    }
+
     setEditingContract(contract);
     setFormData({
       member_id: contract.member_id,
@@ -166,6 +193,15 @@ export default function Contracts() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (editingContract && !isAdmin) {
+      setErrorMessage('Only admins can update contracts.');
+      return;
+    }
+    if (!editingContract && !canCreate) {
+      setErrorMessage('You do not have permission to create contracts.');
+      return;
+    }
+    setErrorMessage('');
 
     if (!formData.member_id) {
       alert('Please select a member first.');
@@ -207,6 +243,11 @@ export default function Contracts() {
   };
 
   const handleActivate = async (contract: ContractRecord) => {
+    if (!isAdmin) {
+      setErrorMessage('Only admins can activate contracts.');
+      return;
+    }
+
     const { error } = await supabase
       .from('contracts')
       .update({ status: 'active', termination_reason: '', terminated_at: null, updated_at: new Date().toISOString() })
@@ -221,6 +262,11 @@ export default function Contracts() {
   };
 
   const handleTerminate = async (contract: ContractRecord) => {
+    if (!isAdmin) {
+      setErrorMessage('Only admins can terminate contracts.');
+      return;
+    }
+
     const reason = prompt('Termination reason (optional):', contract.termination_reason || '');
     if (reason === null) return;
 
@@ -281,6 +327,7 @@ export default function Contracts() {
             <option value="staff">Staff</option>
           </select>
 
+          {canCreate && (
           <button
             onClick={openCreateForm}
             className="flex items-center space-x-2 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
@@ -288,8 +335,15 @@ export default function Contracts() {
             <Plus className="w-5 h-5" />
             <span>New Contract</span>
           </button>
+          )}
         </div>
       </div>
+
+      {errorMessage && (
+        <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+          {errorMessage}
+        </div>
+      )}
 
       <div className="bg-white rounded-lg shadow-sm border border-gray-200 overflow-hidden">
         <table className="w-full">
@@ -338,14 +392,16 @@ export default function Contracts() {
                       >
                         <Download className="w-4 h-4" />
                       </button>
-                      <button
-                        onClick={() => handleEdit(contract)}
-                        className="p-1 text-green-600 hover:bg-green-50 rounded"
-                        title="Edit Contract"
-                      >
-                        <Edit2 className="w-4 h-4" />
-                      </button>
-                      {contract.status !== 'active' && (
+                      {isAdmin && (
+                        <button
+                          onClick={() => handleEdit(contract)}
+                          className="p-1 text-green-600 hover:bg-green-50 rounded"
+                          title="Edit Contract"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {isAdmin && contract.status !== 'active' && (
                         <button
                           onClick={() => handleActivate(contract)}
                           className="p-1 text-blue-600 hover:bg-blue-50 rounded"
@@ -354,7 +410,7 @@ export default function Contracts() {
                           <CheckCircle className="w-4 h-4" />
                         </button>
                       )}
-                      {contract.status !== 'terminated' && (
+                      {isAdmin && contract.status !== 'terminated' && (
                         <button
                           onClick={() => handleTerminate(contract)}
                           className="p-1 text-red-600 hover:bg-red-50 rounded"
@@ -372,7 +428,7 @@ export default function Contracts() {
         </table>
       </div>
 
-      {showForm && (
+      {showForm && canCreate && (
         <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-lg shadow-xl max-w-2xl w-full p-6 my-8">
             <h3 className="text-xl font-bold text-gray-900 mb-4">
