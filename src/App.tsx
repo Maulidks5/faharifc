@@ -11,6 +11,7 @@ import Reports from './pages/Reports';
 import Contracts from './pages/Contracts';
 import Layout from './components/Layout';
 import Users from './pages/Users';
+import AuditLogs from './pages/AuditLogs';
 
 function AppContent() {
   const { user, role, loading } = useAuth();
@@ -42,6 +43,7 @@ function AppContent() {
       {currentPage === 'contracts' && canManageOperations && <Contracts />}
       {currentPage === 'reports' && canManageFinance && <Reports />}
       {currentPage === 'users' && role === 'admin' && <Users />}
+      {currentPage === 'audit-logs' && role === 'admin' && <AuditLogs />}
     </Layout>
   );
 }

@@ -7,9 +7,11 @@ export type UserRole = 'admin' | 'staff' | 'finance';
 interface AuthContextType {
   user: User | null;
   role: UserRole | null;
+  fullName: string | null;
   isActive: boolean | null;
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
+  changePassword: (newPassword: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
 }
 
@@ -19,6 +21,7 @@ const IDLE_TIMEOUT_MS = 5 * 60 * 1000;
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [role, setRole] = useState<UserRole | null>(null);
+  const [fullName, setFullName] = useState<string | null>(null);
   const [isActive, setIsActive] = useState<boolean | null>(null);
   const [loading, setLoading] = useState(true);
   const timeoutRef = useRef<number | null>(null);
@@ -27,19 +30,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const loadUserRole = async (sessionUser: User | null) => {
       if (!sessionUser) {
         setRole(null);
+        setFullName(null);
         setIsActive(null);
         return;
       }
 
       const { data } = await supabase
         .from('user_profiles')
-        .select('role, is_active')
+        .select('role, full_name, is_active')
         .eq('id', sessionUser.id)
         .single();
 
       const nextRole = (data?.role as UserRole | undefined) || null;
+      const nextFullName =
+        (data?.full_name as string | undefined) ||
+        (sessionUser.user_metadata?.full_name as string | undefined) ||
+        null;
       const active = data?.is_active !== false;
       setRole(nextRole);
+      setFullName(nextFullName);
       setIsActive(active);
 
       if (!active) {
@@ -139,8 +148,18 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await supabase.auth.signOut();
   };
 
+  const changePassword = async (newPassword: string) => {
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      return { error: null };
+    } catch (error) {
+      return { error: error as Error };
+    }
+  };
+
   return (
-    <AuthContext.Provider value={{ user, role, isActive, loading, signIn, signOut }}>
+    <AuthContext.Provider value={{ user, role, fullName, isActive, loading, signIn, changePassword, signOut }}>
       {children}
     </AuthContext.Provider>
   );

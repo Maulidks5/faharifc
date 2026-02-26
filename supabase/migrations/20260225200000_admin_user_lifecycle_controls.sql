@@ -1,5 +1,7 @@
 -- Admin lifecycle controls: create users from dashboard and block/activate accounts.
 
+CREATE EXTENSION IF NOT EXISTS pgcrypto;
+
 ALTER TABLE public.user_profiles
   ADD COLUMN IF NOT EXISTS is_active boolean NOT NULL DEFAULT true,
   ADD COLUMN IF NOT EXISTS blocked_at timestamptz,
@@ -31,7 +33,7 @@ CREATE OR REPLACE FUNCTION public.admin_create_user(
 RETURNS uuid
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, auth
+SET search_path = public, auth, extensions
 AS $$
 DECLARE
   v_user_id uuid;
@@ -80,7 +82,7 @@ BEGIN
     'authenticated',
     'authenticated',
     v_email,
-    crypt(p_password, gen_salt('bf')),
+    extensions.crypt(p_password, extensions.gen_salt('bf')),
     now(),
     '{"provider":"email","providers":["email"]}',
     jsonb_build_object('full_name', coalesce(p_full_name, '')),

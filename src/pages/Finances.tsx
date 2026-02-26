@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, DollarSign, TrendingUp, CreditCard } from 'lucide-react';
+import { Plus, DollarSign, TrendingUp, CreditCard, Edit2, Trash2 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { formatCurrency, formatDate } from '../lib/utils';
 import { useAuth } from '../contexts/AuthContext';
@@ -293,9 +293,19 @@ export default function Finances() {
 }
 
 function SalaryPaymentsList() {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any | null>(null);
+  const [formData, setFormData] = useState({
+    amount: '',
+    payment_date: '',
+    month: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadPayments();
@@ -318,6 +328,55 @@ function SalaryPaymentsList() {
     setLoading(false);
   };
 
+  const handleEdit = async (payment: any) => {
+    if (!isAdmin) return;
+    setEditingPayment(payment);
+    setFormData({
+      amount: String(payment.amount ?? ''),
+      payment_date: payment.payment_date || '',
+      month: payment.month || '',
+      notes: payment.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (paymentId: string) => {
+    if (!isAdmin) return;
+    if (!confirm('Delete this salary payment?')) return;
+
+    const { error } = await supabase.from('salary_payments').delete().eq('id', paymentId);
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    await loadPayments();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment) return;
+
+    const { error } = await supabase
+      .from('salary_payments')
+      .update({
+        amount: Number(formData.amount),
+        month: formData.month,
+        payment_date: formData.payment_date,
+        notes: formData.notes,
+      })
+      .eq('id', editingPayment.id);
+
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+
+    setShowForm(false);
+    setEditingPayment(null);
+    await loadPayments();
+  };
+
   if (loading) return <div className="text-center py-8">Loading...</div>;
   if (errorMessage) {
     return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
@@ -332,12 +391,15 @@ function SalaryPaymentsList() {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Member</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Month</th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+            {isAdmin && (
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
           {payments.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={isAdmin ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
                 No payments recorded
               </td>
             </tr>
@@ -350,19 +412,111 @@ function SalaryPaymentsList() {
                 <td className="px-4 py-3 text-sm text-gray-900 text-right">
                   {formatCurrency(Number(payment.amount))}
                 </td>
+                {isAdmin && (
+                  <td className="px-4 py-3 text-sm text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => void handleEdit(payment)}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => void handleDelete(payment.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))
           )}
         </tbody>
       </table>
+
+      {showForm && isAdmin && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Edit Salary Payment</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (TZS)</label>
+                <input
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={formData.payment_date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, payment_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Month</label>
+                <input
+                  type="text"
+                  value={formData.month}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, month: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                  Update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingPayment(null);
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function ExtraPaymentsList() {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [payments, setPayments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingPayment, setEditingPayment] = useState<any | null>(null);
+  const [formData, setFormData] = useState({
+    amount: '',
+    payment_date: '',
+    category: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadPayments();
@@ -385,6 +539,50 @@ function ExtraPaymentsList() {
     setLoading(false);
   };
 
+  const handleEdit = (payment: any) => {
+    if (!isAdmin) return;
+    setEditingPayment(payment);
+    setFormData({
+      amount: String(payment.amount ?? ''),
+      payment_date: payment.payment_date || '',
+      category: payment.category || '',
+      notes: payment.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (paymentId: string) => {
+    if (!isAdmin) return;
+    if (!confirm('Delete this extra payment?')) return;
+    const { error } = await supabase.from('extra_payments').delete().eq('id', paymentId);
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+    await loadPayments();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingPayment) return;
+    const { error } = await supabase
+      .from('extra_payments')
+      .update({
+        amount: Number(formData.amount),
+        payment_date: formData.payment_date,
+        category: formData.category,
+        notes: formData.notes,
+      })
+      .eq('id', editingPayment.id);
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+    setShowForm(false);
+    setEditingPayment(null);
+    await loadPayments();
+  };
+
   if (loading) return <div className="text-center py-8">Loading...</div>;
   if (errorMessage) {
     return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
@@ -399,12 +597,15 @@ function ExtraPaymentsList() {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Member</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+            {isAdmin && (
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
           {payments.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={isAdmin ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
                 No payments recorded
               </td>
             </tr>
@@ -417,19 +618,111 @@ function ExtraPaymentsList() {
                 <td className="px-4 py-3 text-sm text-gray-900 text-right">
                   {formatCurrency(Number(payment.amount))}
                 </td>
+                {isAdmin && (
+                  <td className="px-4 py-3 text-sm text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleEdit(payment)}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => void handleDelete(payment.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))
           )}
         </tbody>
       </table>
+
+      {showForm && isAdmin && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Edit Extra Payment</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (TZS)</label>
+                <input
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={formData.payment_date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, payment_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Category</label>
+                <input
+                  type="text"
+                  value={formData.category}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, category: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                  Update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingPayment(null);
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function ClubIncomeList() {
+  const { role } = useAuth();
+  const isAdmin = role === 'admin';
   const [income, setIncome] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState('');
+  const [showForm, setShowForm] = useState(false);
+  const [editingIncome, setEditingIncome] = useState<any | null>(null);
+  const [formData, setFormData] = useState({
+    amount: '',
+    income_date: '',
+    source: '',
+    notes: '',
+  });
 
   useEffect(() => {
     loadIncome();
@@ -449,6 +742,50 @@ function ClubIncomeList() {
     setLoading(false);
   };
 
+  const handleEdit = (item: any) => {
+    if (!isAdmin) return;
+    setEditingIncome(item);
+    setFormData({
+      amount: String(item.amount ?? ''),
+      income_date: item.income_date || '',
+      source: item.source || '',
+      notes: item.notes || '',
+    });
+    setShowForm(true);
+  };
+
+  const handleDelete = async (incomeId: string) => {
+    if (!isAdmin) return;
+    if (!confirm('Delete this income record?')) return;
+    const { error } = await supabase.from('club_income').delete().eq('id', incomeId);
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+    await loadIncome();
+  };
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingIncome) return;
+    const { error } = await supabase
+      .from('club_income')
+      .update({
+        amount: Number(formData.amount),
+        income_date: formData.income_date,
+        source: formData.source,
+        notes: formData.notes,
+      })
+      .eq('id', editingIncome.id);
+    if (error) {
+      setErrorMessage(error.message);
+      return;
+    }
+    setShowForm(false);
+    setEditingIncome(null);
+    await loadIncome();
+  };
+
   if (loading) return <div className="text-center py-8">Loading...</div>;
   if (errorMessage) {
     return <div className="text-center py-8 text-red-600">{errorMessage}</div>;
@@ -463,12 +800,15 @@ function ClubIncomeList() {
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Source</th>
             <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Notes</th>
             <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Amount</th>
+            {isAdmin && (
+              <th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Actions</th>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-200">
           {income.length === 0 ? (
             <tr>
-              <td colSpan={4} className="px-4 py-8 text-center text-gray-500">
+              <td colSpan={isAdmin ? 5 : 4} className="px-4 py-8 text-center text-gray-500">
                 No income recorded
               </td>
             </tr>
@@ -481,11 +821,93 @@ function ClubIncomeList() {
                 <td className="px-4 py-3 text-sm text-green-600 text-right font-medium">
                   {formatCurrency(Number(item.amount))}
                 </td>
+                {isAdmin && (
+                  <td className="px-4 py-3 text-sm text-right">
+                    <div className="flex items-center justify-end gap-2">
+                      <button
+                        onClick={() => handleEdit(item)}
+                        className="p-1 text-green-600 hover:bg-green-50 rounded"
+                      >
+                        <Edit2 className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => void handleDelete(item.id)}
+                        className="p-1 text-red-600 hover:bg-red-50 rounded"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </td>
+                )}
               </tr>
             ))
           )}
         </tbody>
       </table>
+
+      {showForm && isAdmin && (
+        <div className="fixed inset-0 bg-gray-900 bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg shadow-xl max-w-md w-full p-6">
+            <h3 className="text-xl font-bold text-gray-900 mb-4">Edit Club Income</h3>
+            <form onSubmit={handleSubmit} className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Source</label>
+                <input
+                  type="text"
+                  value={formData.source}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, source: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Amount (TZS)</label>
+                <input
+                  type="number"
+                  value={formData.amount}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, amount: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Date</label>
+                <input
+                  type="date"
+                  value={formData.income_date}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, income_date: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  required
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">Notes</label>
+                <textarea
+                  value={formData.notes}
+                  onChange={(e) => setFormData((prev) => ({ ...prev, notes: e.target.value }))}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg"
+                  rows={3}
+                />
+              </div>
+              <div className="flex gap-3 pt-2">
+                <button type="submit" className="flex-1 bg-green-600 text-white py-2 rounded-lg hover:bg-green-700">
+                  Update
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowForm(false);
+                    setEditingIncome(null);
+                  }}
+                  className="flex-1 bg-gray-200 text-gray-700 py-2 rounded-lg hover:bg-gray-300"
+                >
+                  Cancel
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
